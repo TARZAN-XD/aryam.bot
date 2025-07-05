@@ -1,132 +1,103 @@
-// telegramBot.js
 const TelegramBot = require("node-telegram-bot-api");
-const { generatePairingCode, generateQRCode, deleteSession } = require("./whatsappManager");
+const { generatePairingCode } = require("./pairing");
 const fs = require("fs-extra");
 const path = require("path");
-const express = require("express");
-const cors = require("cors");
 
-const TG_TOKEN = "7277157537:AAFNn75vKddw_zuZo1ljJ0r5SASyuheJRCs"; // توكن البوت
-const SESSION_DIR = path.join(__dirname, "session");
+// ✅ التوكن الخاص بالبوت
+const TG_TOKEN = "7277157537:AAFNn75vKddw_zuZo1ljJ0r5SASyuheJRCs";
+
+// ✅ تشغيل البوت
 const bot = new TelegramBot(TG_TOKEN, { polling: true });
-const app = express();
 
-app.use(cors());
-app.use(express.json());
-
-// دالة التحقق من الرقم
-function isValidNumber(number) {
-  return /^[0-9]{8,15}$/.test(number);
-}
-
+// ✅ رسالة ترحيب عند البدء
 bot.on("message", async (msg) => {
-  const text = msg.text?.trim();
-  const chatId = msg.chat.id;
-  if (!text) return;
-
-  if (text === "/start" || text === "/help") {
-    return bot.sendMessage(chatId, `
-🤖 *بوت ربط واتساب عبر تيليجرام*
+  if (msg.text === "/start" || msg.text === "/help") {
+    const welcome = `
+🤖 *مرحبًا بك في بوت ربط واتساب عبر تيليجرام!*
 
 📌 *الأوامر المتاحة:*
 
-🔗 ربط برمز اقتران:
-/pair <رقم الهاتف>
+🔗 *ربط رقم واتساب:*
+\`/pair 966xxxxxxxxx\`
 
-📷 ربط بكود QR:
-/qr <رقم الهاتف>
+🗑️ *حذف جلسة رقم:*
+\`/delpair 966xxxxxxxxx\`
 
-🗑 حذف جلسة:
-/delpair <رقم الهاتف>
+📋 *عرض الأرقام المرتبطة:*
+\`/listpairs\`
 
-📋 عرض الأرقام المرتبطة:
-/listpairs
-
-> المطور: طرزان الوقدي 💀
-    `, { parse_mode: "Markdown" });
-  }
-
-  // أمر /pair
-  if (text.startsWith("/pair ")) {
-    const number = text.split(" ")[1];
-    if (!isValidNumber(number)) {
-      return bot.sendMessage(chatId, "❌ رقم غير صالح. استخدم: /pair 9665XXXXXXX");
-    }
-
-    try {
-      bot.sendMessage(chatId, `🔄 جاري توليد رمز اقتران للرقم: *${number}* ...`, { parse_mode: "Markdown" });
-      const code = await generatePairingCode(number);
-      return bot.sendMessage(chatId, `🔑 رمز الاقتران الخاص بالرقم *${number}*:
-
-*${code}*
-
-📲 من واتساب: الأجهزة المرتبطة > ربط جهاز > (رمز بدون QR)`, { parse_mode: "Markdown" });
-    } catch (err) {
-      console.error(err);
-      return bot.sendMessage(chatId, `❌ فشل توليد رمز الاقتران: ${err.message}`);
-    }
-  }
-
-  // أمر /qr
-  if (text.startsWith("/qr ")) {
-    const number = text.split(" ")[1];
-    if (!isValidNumber(number)) {
-      return bot.sendMessage(chatId, "❌ رقم غير صالح. استخدم: /qr 9665XXXXXXX");
-    }
-
-    try {
-      await generateQRCode(number, chatId, bot);
-    } catch (err) {
-      console.error(err);
-      return bot.sendMessage(chatId, `❌ فشل توليد كود QR: ${err.message}`);
-    }
-  }
-
-  // أمر /delpair
-  if (text.startsWith("/delpair ")) {
-    const number = text.split(" ")[1];
-    if (!isValidNumber(number)) {
-      return bot.sendMessage(chatId, "❌ رقم غير صالح. استخدم: /delpair 9665XXXXXXX");
-    }
-
-    try {
-      const result = await deleteSession(number);
-      return bot.sendMessage(chatId, result);
-    } catch (err) {
-      console.error(err);
-      return bot.sendMessage(chatId, `❌ خطأ أثناء حذف الجلسة: ${err.message}`);
-    }
-  }
-
-  // أمر /listpairs
-  if (text === "/listpairs") {
-    try {
-      const numbers = (await fs.readdir(SESSION_DIR)).filter(d => /^\d+$/.test(d));
-      if (!numbers.length) return bot.sendMessage(chatId, "📂 لا توجد جلسات حالية.");
-
-      const list = numbers.map((n, i) => `🔹 ${i + 1}. +${n}`).join("\n");
-      return bot.sendMessage(chatId, `📋 *الجلسات الحالية:*\n\n${list}`, { parse_mode: "Markdown" });
-    } catch (err) {
-      console.error(err);
-      return bot.sendMessage(chatId, `❌ فشل عرض الجلسات: ${err.message}`);
-    }
+> البوت من تطوير: *طرزان الوقدي*
+    `;
+    await bot.sendMessage(msg.chat.id, welcome, { parse_mode: "Markdown" });
   }
 });
 
-// API Web: توليد رمز اقتران من الواجهة الأمامية
-app.post("/api/pair", async (req, res) => {
-  const number = req.body.number;
-  if (!isValidNumber(number)) {
-    return res.status(400).json({ error: "رقم غير صالح" });
-  }
+// ✅ أمر /pair <رقم> لتوليد رمز الاقتران
+bot.onText(/^\/pair (\d{8,15})$/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const number = match[1];
 
   try {
+    await bot.sendMessage(chatId, `🔄 جاري توليد رمز الاقتران للرقم: *${number}* ...`, { parse_mode: "Markdown" });
     const code = await generatePairingCode(number);
-    res.json({ code });
+    await bot.sendMessage(chatId, `🔑 رمز الاقتران:\n\n*${code}*`, {
+      parse_mode: "Markdown"
+    });
+    await bot.sendMessage(chatId, `❗️ أدخل الرمز في *واتساب > الأجهزة المرتبطة > ربط جهاز*`, {
+      parse_mode: "Markdown"
+    });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
+    await bot.sendMessage(chatId, `❌ خطأ أثناء توليد الرمز:\n${err.message}`);
   }
 });
 
-app.listen(3000, () => console.log("✅ Telegram & WhatsApp Bot + API يعمل على المنفذ 3000"));
+// ✅ أمر /delpair <رقم> لحذف الجلسة
+bot.onText(/^\/delpair (\d{8,15})$/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const number = match[1];
+  const sessionPath = path.join(__dirname, "session", number);
+
+  try {
+    if (await fs.pathExists(sessionPath)) {
+      await fs.remove(sessionPath);
+      await bot.sendMessage(chatId, `🗑️ تم حذف جلسة الرقم *${number}* بنجاح.\nاستخدم /pair لإعادة الربط.`, {
+        parse_mode: "Markdown"
+      });
+    } else {
+      await bot.sendMessage(chatId, `⚠️ لا توجد جلسة محفوظة لهذا الرقم.`);
+    }
+  } catch (err) {
+    await bot.sendMessage(chatId, `❌ حدث خطأ أثناء حذف الجلسة:\n${err.message}`);
+  }
+});
+
+// ✅ أمر /listpairs لعرض كل الأرقام المرتبطة
+bot.onText(/^\/listpairs$/, async (msg) => {
+  const chatId = msg.chat.id;
+  const sessionDir = path.join(__dirname, "session");
+
+  try {
+    if (!(await fs.pathExists(sessionDir))) {
+      return await bot.sendMessage(chatId, "📂 لا توجد أي جلسات حالية.");
+    }
+
+    const folders = await fs.readdir(sessionDir);
+    const active = folders.filter(name => /^\d+$/.test(name));
+
+    if (active.length === 0) {
+      return await bot.sendMessage(chatId, "📂 لا توجد أي جلسات حالية.");
+    }
+
+    const list = active.map((n, i) => `🔸 ${i + 1}. +${n}`).join("\n");
+    await bot.sendMessage(chatId, `
+📄 *قائمة الأرقام المرتبطة:*
+
+${list}
+
+📌 *المجموع:* ${active.length} رقم
+    `, { parse_mode: "Markdown" });
+
+  } catch (err) {
+    await bot.sendMessage(chatId, `❌ خطأ أثناء عرض الجلسات:\n${err.message}`);
+  }
+});
