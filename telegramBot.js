@@ -1,66 +1,98 @@
+// telegramBot.js
 const TelegramBot = require("node-telegram-bot-api");
 const { generateQRCode } = require("./pairing");
 const fs = require("fs-extra");
 const path = require("path");
 
+// ✅ التوكن الخاص بالبوت
 const TG_TOKEN = "7277157537:AAFNn75vKddw_zuZo1ljJ0r5SASyuheJRCs";
+
+// ✅ تشغيل البوت
 const bot = new TelegramBot(TG_TOKEN, { polling: true });
 
-bot.onText(/^\/start|\/help$/, async (msg) => {
-  const help = `
-🤖 *مرحبًا بك في بوت ربط واتساب عبر QR!*
+// ✅ رسالة ترحيب عند البدء
+bot.on("message", async (msg) => {
+  if (msg.text === "/start" || msg.text === "/help") {
+    const welcome = `
+🤖 *مرحبًا بك في بوت ربط واتساب عبر تيليجرام!*
 
-📌 *الأوامر:*
-📷 \`/qr 966xxxxxxxxx\` - توليد QR للرقم
-🗑 \`/delpair 966xxxxxxxxx\` - حذف الجلسة
-📋 \`/listpairs\` - قائمة الجلسات
-`;
-  await bot.sendMessage(msg.chat.id, help, { parse_mode: "Markdown" });
+📌 *الأوامر المتاحة:*
+
+📷 *توليد كود QR للربط:*
+\`/qr 966xxxxxxxxx\`
+
+🗑️ *حذف جلسة رقم:*
+\`/delpair 966xxxxxxxxx\`
+
+📋 *عرض الأرقام المرتبطة:*
+\`/listpairs\`
+
+> البوت من تطوير: *طرزان الوقدي*
+    `;
+    await bot.sendMessage(msg.chat.id, welcome, { parse_mode: "Markdown" });
+  }
 });
 
+// ✅ توليد كود QR حقيقي
 bot.onText(/^\/qr (\d{8,15})$/, async (msg, match) => {
-  const number = match[1];
   const chatId = msg.chat.id;
+  const number = match[1];
 
   try {
-    await bot.sendMessage(chatId, `📸 جاري توليد QR للرقم: *${number}*`, { parse_mode: "Markdown" });
-    const qrImageBuffer = await generateQRCode(number);
-    await bot.sendPhoto(chatId, qrImageBuffer, { caption: `✅ امسح الكود داخل واتساب - ${number}` });
+    await bot.sendMessage(chatId, `🔄 جاري توليد كود QR للرقم: *${number}* ...`, { parse_mode: "Markdown" });
+    await generateQRCode(number, chatId, bot);
   } catch (err) {
     await bot.sendMessage(chatId, `❌ خطأ أثناء توليد الكود:\n${err.message}`);
   }
 });
 
+// ✅ حذف الجلسة
 bot.onText(/^\/delpair (\d{8,15})$/, async (msg, match) => {
+  const chatId = msg.chat.id;
   const number = match[1];
   const sessionPath = path.join(__dirname, "session", number);
-  const chatId = msg.chat.id;
 
   try {
     if (await fs.pathExists(sessionPath)) {
       await fs.remove(sessionPath);
-      await bot.sendMessage(chatId, `🗑 تم حذف جلسة الرقم: *${number}*`, { parse_mode: "Markdown" });
+      await bot.sendMessage(chatId, `🗑️ تم حذف جلسة الرقم *${number}* بنجاح.`, {
+        parse_mode: "Markdown"
+      });
     } else {
-      await bot.sendMessage(chatId, `⚠️ لا توجد جلسة لهذا الرقم.`);
+      await bot.sendMessage(chatId, `⚠️ لا توجد جلسة محفوظة لهذا الرقم.`);
     }
   } catch (err) {
-    await bot.sendMessage(chatId, `❌ خطأ:\n${err.message}`);
+    await bot.sendMessage(chatId, `❌ خطأ أثناء حذف الجلسة:\n${err.message}`);
   }
 });
 
+// ✅ عرض الجلسات
 bot.onText(/^\/listpairs$/, async (msg) => {
-  const sessionDir = path.join(__dirname, "session");
   const chatId = msg.chat.id;
+  const sessionDir = path.join(__dirname, "session");
 
   try {
-    const all = (await fs.readdir(sessionDir)).filter((n) => /^\d+$/.test(n));
-    if (!all.length) {
-      return await bot.sendMessage(chatId, `📂 لا توجد جلسات حالياً.`);
+    if (!(await fs.pathExists(sessionDir))) {
+      return await bot.sendMessage(chatId, "📂 لا توجد أي جلسات حالية.");
     }
 
-    const list = all.map((n, i) => `🔹 ${i + 1}. +${n}`).join("\n");
-    await bot.sendMessage(chatId, `📋 *الجلسات:*\n${list}`, { parse_mode: "Markdown" });
+    const folders = await fs.readdir(sessionDir);
+    const active = folders.filter(name => /^\d+$/.test(name));
+
+    if (active.length === 0) {
+      return await bot.sendMessage(chatId, "📂 لا توجد أي جلسات حالية.");
+    }
+
+    const list = active.map((n, i) => `🔸 ${i + 1}. +${n}`).join("\n");
+    await bot.sendMessage(chatId, `
+📄 *قائمة الأرقام المرتبطة:*
+
+${list}
+
+📌 *المجموع:* ${active.length} رقم
+    `, { parse_mode: "Markdown" });
+
   } catch (err) {
-    await bot.sendMessage(chatId, `❌ فشل عرض الجلسات:\n${err.message}`);
+    await bot.sendMessage(chatId, `❌ خطأ أثناء عرض الجلسات:\n${err.message}`);
   }
 });
