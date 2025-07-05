@@ -1,14 +1,15 @@
 {
-  "name": "wa-pairing-bot",
+  "name": "telegram-whatsapp-linker",
   "version": "1.0.0",
   "main": "telegramBot.js",
   "scripts": {
     "start": "node telegramBot.js"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.18",
+    "@hapi/boom": "^10.0.0",
+    "@whiskeysockets/baileys": "^6.7.2",
     "fs-extra": "^11.1.1",
     "node-telegram-bot-api": "^0.61.0",
-    "pino": "^8.15.0"
+    "qrcode": "^1.5.1"
   }
 }
