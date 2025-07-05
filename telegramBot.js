@@ -1,15 +1,12 @@
+// telegramBot.js
 const TelegramBot = require("node-telegram-bot-api");
-const { generatePairingCode } = require("./pairing");
+const { generateQRCode } = require("./pairing");
 const fs = require("fs-extra");
 const path = require("path");
 
-// ✅ التوكن الخاص بالبوت
 const TG_TOKEN = "7277157537:AAFNn75vKddw_zuZo1ljJ0r5SASyuheJRCs";
-
-// ✅ تشغيل البوت
 const bot = new TelegramBot(TG_TOKEN, { polling: true });
 
-// ✅ رسالة ترحيب عند البدء
 bot.on("message", async (msg) => {
   if (msg.text === "/start" || msg.text === "/help") {
     const welcome = `
@@ -17,7 +14,7 @@ bot.on("message", async (msg) => {
 
 📌 *الأوامر المتاحة:*
 
-🔗 *ربط رقم واتساب:*
+📷 *ربط عبر QR:*
 \`/pair 966xxxxxxxxx\`
 
 🗑️ *حذف جلسة رقم:*
@@ -32,26 +29,29 @@ bot.on("message", async (msg) => {
   }
 });
 
-// ✅ أمر /pair <رقم> لتوليد رمز الاقتران
+// أمر /pair لتوليد QR
 bot.onText(/^\/pair (\d{8,15})$/, async (msg, match) => {
   const chatId = msg.chat.id;
   const number = match[1];
 
   try {
-    await bot.sendMessage(chatId, `🔄 جاري توليد رمز الاقتران للرقم: *${number}* ...`, { parse_mode: "Markdown" });
-    const code = await generatePairingCode(number);
-    await bot.sendMessage(chatId, `🔑 رمز الاقتران:\n\n*${code}*`, {
+    await bot.sendMessage(chatId, `🔄 جاري توليد كود QR للرقم: *${number}* ...`, { parse_mode: "Markdown" });
+
+    const qrPath = await generateQRCode(number); // يرجع مسار الصورة
+    await bot.sendPhoto(chatId, qrPath, {
+      caption: `📷 *كود الاقتران للرقم:* ${number}`,
       parse_mode: "Markdown"
     });
-    await bot.sendMessage(chatId, `❗️ أدخل الرمز في *واتساب > الأجهزة المرتبطة > ربط جهاز*`, {
-      parse_mode: "Markdown"
-    });
+
+    // حذف ملف الصورة بعد الإرسال
+    setTimeout(() => fs.remove(qrPath), 5000);
+
   } catch (err) {
-    await bot.sendMessage(chatId, `❌ خطأ أثناء توليد الرمز:\n${err.message}`);
+    await bot.sendMessage(chatId, `❌ خطأ أثناء توليد الكود:\n${err.message}`);
   }
 });
 
-// ✅ أمر /delpair <رقم> لحذف الجلسة
+// حذف الجلسة
 bot.onText(/^\/delpair (\d{8,15})$/, async (msg, match) => {
   const chatId = msg.chat.id;
   const number = match[1];
@@ -60,9 +60,7 @@ bot.onText(/^\/delpair (\d{8,15})$/, async (msg, match) => {
   try {
     if (await fs.pathExists(sessionPath)) {
       await fs.remove(sessionPath);
-      await bot.sendMessage(chatId, `🗑️ تم حذف جلسة الرقم *${number}* بنجاح.\nاستخدم /pair لإعادة الربط.`, {
-        parse_mode: "Markdown"
-      });
+      await bot.sendMessage(chatId, `🗑️ تم حذف جلسة الرقم *${number}* بنجاح.`, { parse_mode: "Markdown" });
     } else {
       await bot.sendMessage(chatId, `⚠️ لا توجد جلسة محفوظة لهذا الرقم.`);
     }
@@ -71,7 +69,7 @@ bot.onText(/^\/delpair (\d{8,15})$/, async (msg, match) => {
   }
 });
 
-// ✅ أمر /listpairs لعرض كل الأرقام المرتبطة
+// عرض الجلسات
 bot.onText(/^\/listpairs$/, async (msg) => {
   const chatId = msg.chat.id;
   const sessionDir = path.join(__dirname, "session");
