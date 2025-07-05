@@ -1,13 +1,17 @@
-const { default: makeWASocket, useMultiFileAuthState, makeInMemoryStore, DisconnectReason } = require("@whiskeysockets/baileys");
+const {
+  default: makeWASocket,
+  useMultiFileAuthState,
+  makeInMemoryStore,
+  DisconnectReason,
+} = require("@whiskeysockets/baileys");
 const fs = require("fs-extra");
 const path = require("path");
+const qrcode = require("qrcode");
 
 const sessionsDir = path.join(__dirname, "session");
 fs.ensureDirSync(sessionsDir);
 
-const sockets = {};
-
-async function generatePairingCode(number) {
+async function generateQRCode(number) {
   const sessionPath = path.join(sessionsDir, number);
   await fs.ensureDir(sessionPath);
 
@@ -18,32 +22,36 @@ async function generatePairingCode(number) {
       auth: state,
       printQRInTerminal: false,
       defaultQueryTimeoutMs: 60000,
-      syncFullHistory: false,
     });
-
-    sockets[number] = sock;
 
     sock.ev.on("creds.update", saveCreds);
 
     sock.ev.on("connection.update", async (update) => {
-      const { connection, qr, pairingCode, lastDisconnect } = update;
+      const { connection, qr, lastDisconnect } = update;
 
       if (connection === "close") {
-        const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-        if (!shouldReconnect) {
-          reject(new Error("تم تسجيل الخروج أو فشل الاتصال."));
+        const reason = lastDisconnect?.error?.output?.statusCode;
+        if (reason !== DisconnectReason.loggedOut) {
+          return reject(new Error("❌ تم قطع الاتصال."));
         }
       }
 
-      if (pairingCode) {
-        resolve(pairingCode);
+      if (qr) {
+        try {
+          const qrImageBuffer = await qrcode.toBuffer(qr);
+          resolve(qrImageBuffer);
+        } catch (err) {
+          reject(new Error("❌ فشل تحويل QR إلى صورة."));
+        }
+      }
+
+      if (connection === "open") {
+        sock.ws.close(); // بعد الربط يغلق
       }
     });
-
-    sock.ev.on("messages.upsert", () => {});
   });
 }
 
 module.exports = {
-  generatePairingCode
+  generateQRCode,
 };
