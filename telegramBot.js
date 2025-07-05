@@ -4,7 +4,7 @@ const fs = require("fs-extra");
 const path = require("path");
 
 // ✅ التوكن الخاص بالبوت
-const TG_TOKEN = "7277157537:AAFNn75vKddw_zuZo1ljJ0r5SASyuheJRCs";
+const TG_TOKEN = "7468967312:AAGeEoeJaD1WarTcLhbRBmbil1kD-Mz3khE";
 
 // ✅ تشغيل البوت
 const bot = new TelegramBot(TG_TOKEN, { polling: true });
