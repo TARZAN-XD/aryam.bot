@@ -13,7 +13,6 @@ async function generatePairingCode(number) {
     version,
     logger: P({ level: "silent" }),
     auth: state,
-    printQRInTerminal: false,
     browser: ['Chrome', 'Chrome', '120']
   });
 
