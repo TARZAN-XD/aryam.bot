@@ -1,18 +1,17 @@
 {
-  "name": "telegram-whatsapp-qr-bot",
+  "name": "telegram-whatsapp-linker",
   "version": "1.0.0",
-  "description": "بوت تيليجرام لربط واتساب عبر كود QR",
+  "description": "بوت تيليجرام لربط واتساب عبر QR",
   "main": "telegramBot.js",
   "scripts": {
     "start": "node telegramBot.js"
   },
-  "author": "Tarzan Alwaqdiy",
-  "license": "MIT",
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.2",
-    "fs-extra": "^11.2.0",
+    "@whiskeysockets/baileys": "^6.7.8",
+    "fs-extra": "^11.1.1",
     "node-telegram-bot-api": "^0.61.0",
-    "path": "^0.12.7",
-    "qrcode": "^1.5.3"
-  }
+    "qrcode": "^1.5.1"
+  },
+  "author": "Tarzan Alwaqdiy",
+  "license": "MIT"
 }
