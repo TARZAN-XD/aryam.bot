@@ -1,47 +1,49 @@
-// pairing.js
-const { makeWASocket, useSingleFileAuthState } = require("@whiskeysockets/baileys");
-const { Boom } = require("@hapi/boom");
+const { default: makeWASocket, useMultiFileAuthState, makeInMemoryStore, DisconnectReason } = require("@whiskeysockets/baileys");
 const fs = require("fs-extra");
 const path = require("path");
-const qrcode = require("qrcode");
 
-async function generateQRCode(number) {
-  const sessionDir = path.join(__dirname, "session", number);
-  await fs.ensureDir(sessionDir);
-  const { state, saveState } = useSingleFileAuthState(path.join(sessionDir, "auth_info.json"));
+const sessionsDir = path.join(__dirname, "session");
+fs.ensureDirSync(sessionsDir);
+
+const sockets = {};
+
+async function generatePairingCode(number) {
+  const sessionPath = path.join(sessionsDir, number);
+  await fs.ensureDir(sessionPath);
+
+  const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
 
   return new Promise((resolve, reject) => {
     const sock = makeWASocket({
       auth: state,
       printQRInTerminal: false,
+      defaultQueryTimeoutMs: 60000,
+      syncFullHistory: false,
     });
+
+    sockets[number] = sock;
+
+    sock.ev.on("creds.update", saveCreds);
 
     sock.ev.on("connection.update", async (update) => {
-      const { connection, qr } = update;
-
-      if (qr) {
-        const qrImagePath = path.join(sessionDir, "qr.png");
-        await qrcode.toFile(qrImagePath, qr);
-        resolve(qrImagePath);
-      }
-
-      if (connection === "open") {
-        await sock.logout();
-      }
+      const { connection, qr, pairingCode, lastDisconnect } = update;
 
       if (connection === "close") {
-        const shouldReconnect = (update.lastDisconnect?.error instanceof Boom) &&
-          update.lastDisconnect.error.output.statusCode !== DisconnectReason.loggedOut;
+        const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
         if (!shouldReconnect) {
-          reject(new Error("تم إغلاق الاتصال"));
+          reject(new Error("تم تسجيل الخروج أو فشل الاتصال."));
         }
+      }
+
+      if (pairingCode) {
+        resolve(pairingCode);
       }
     });
 
-    sock.ev.on("creds.update", saveState);
+    sock.ev.on("messages.upsert", () => {});
   });
 }
 
 module.exports = {
-  generateQRCode,
+  generatePairingCode
 };
